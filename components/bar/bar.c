@@ -1,5 +1,5 @@
 #include "bar.h"
 
 void printBar() {
-    puts("BAR");
+    printf("BAR %d", CONFIG_BAR_VALUE);
 }
