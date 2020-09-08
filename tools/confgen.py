@@ -20,15 +20,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from __future__ import print_function
 import argparse
-import json
 import os
-import os.path
 import re
 import sys
 import tempfile
-from future.utils import iteritems
 
 try:
     from . import kconfiglib
@@ -37,10 +33,6 @@ except Exception:
     import kconfiglib
 
 __version__ = "0.1"
-
-if "IDF_CMAKE" not in os.environ:
-    os.environ["IDF_CMAKE"] = ""
-
 
 class DeprecatedOptions(object):
     _REN_FILE = 'sdkconfig.rename'
@@ -181,22 +173,6 @@ class DeprecatedOptions(object):
                     if new_opt in config.syms and _opt_defined(config.syms[new_opt]):
                         f_o.write('#define {}{} {}{}\n'.format(self.config_prefix, dep_opt, self.config_prefix, new_opt))
 
-
-def dict_enc_for_env(dic, encoding=sys.getfilesystemencoding() or 'utf-8'):
-    """
-    This function can be deleted after dropping support for Python 2.
-    There is no rule for it that environment variables cannot be Unicode but usually people try to avoid it.
-    The upstream kconfiglib cannot detect strings properly if the environment variables are "unicode". This is problem
-    only in Python 2.
-    """
-    if sys.version_info[0] >= 3:
-        return dic
-    ret = dict()
-    for (key, value) in iteritems(dic):
-        ret[key.encode(encoding)] = value.encode(encoding)
-    return ret
-
-
 def main():
     parser = argparse.ArgumentParser(description='confgen.py v%s - Config Generation Tool' % __version__, prog=os.path.basename(sys.argv[0]))
 
@@ -254,7 +230,6 @@ def main():
 
     if args.env_file is not None:
         env = json.load(args.env_file)
-        os.environ.update(dict_enc_for_env(env))
 
     config = kconfiglib.Kconfig(args.kconfig)
     config.warn_assign_redun = False
@@ -330,77 +305,14 @@ def main():
             except OSError:
                 pass
 
-
-def write_config(deprecated_options, config, filename):
-    CONFIG_HEADING = """#
-# Automatically generated file. DO NOT EDIT.
-# Espressif IoT Development Framework (ESP-IDF) Project Configuration
-#
-"""
-    config.write_config(filename, header=CONFIG_HEADING)
-    deprecated_options.append_config(config, filename)
-
-
-def write_makefile(deprecated_options, config, filename):
-    CONFIG_HEADING = """#
-# Automatically generated file. DO NOT EDIT.
-# Espressif IoT Development Framework (ESP-IDF) Project Makefile Configuration
-#
-"""
-    with open(filename, "w") as f:
-        tmp_dep_lines = []
-        f.write(CONFIG_HEADING)
-
-        def get_makefile_config_string(name, value, orig_type):
-            if orig_type in (kconfiglib.BOOL, kconfiglib.TRISTATE):
-                value = '' if value == 'n' else value
-            elif orig_type == kconfiglib.INT:
-                try:
-                    value = int(value)
-                except ValueError:
-                    value = ""
-            elif orig_type == kconfiglib.HEX:
-                try:
-                    value = hex(int(value, 16))  # ensure 0x prefix
-                except ValueError:
-                    value = ""
-            elif orig_type == kconfiglib.STRING:
-                value = '"{}"'.format(kconfiglib.escape(value))
-            else:
-                raise RuntimeError('{}{}: unknown type {}'.format(config.config_prefix, name, orig_type))
-
-            return '{}{}={}\n'.format(config.config_prefix, name, value)
-
-        def write_makefile_node(node):
-            item = node.item
-            if isinstance(item, kconfiglib.Symbol) and item.env_var is None:
-                # item.config_string cannot be used because it ignores hidden config items
-                val = item.str_value
-                f.write(get_makefile_config_string(item.name, val, item.orig_type))
-
-                dep_opt = deprecated_options.get_deprecated_option(item.name)
-                if dep_opt:
-                    # the same string but with the deprecated name
-                    tmp_dep_lines.append(get_makefile_config_string(dep_opt, val, item.orig_type))
-
-        for n in config.node_iter(True):
-            write_makefile_node(n)
-
-        if len(tmp_dep_lines) > 0:
-            f.write('\n# List of deprecated options\n')
-            f.writelines(tmp_dep_lines)
-
-
 def write_header(deprecated_options, config, filename):
     CONFIG_HEADING = """/*
  * Automatically generated file. DO NOT EDIT.
- * Espressif IoT Development Framework (ESP-IDF) Configuration Header
  */
 #pragma once
 """
     config.write_autoconf(filename, header=CONFIG_HEADING)
     deprecated_options.append_header(config, filename)
-
 
 def write_cmake(deprecated_options, config, filename):
     with open(filename, "w") as f:
@@ -410,7 +322,6 @@ def write_cmake(deprecated_options, config, filename):
 
         write("""#
 # Automatically generated file. DO NOT EDIT.
-# Espressif IoT Development Framework (ESP-IDF) Configuration cmake include file
 #
 """)
 
@@ -445,164 +356,6 @@ def write_cmake(deprecated_options, config, filename):
             write('\n# List of deprecated options for backward compatibility\n')
             f.writelines(tmp_dep_list)
 
-
-def get_json_values(config):
-    config_dict = {}
-
-    def write_node(node):
-        sym = node.item
-        if not isinstance(sym, kconfiglib.Symbol):
-            return
-
-        if sym.config_string:
-            val = sym.str_value
-            if sym.type in [kconfiglib.BOOL, kconfiglib.TRISTATE]:
-                val = (val != "n")
-            elif sym.type == kconfiglib.HEX:
-                val = int(val, 16)
-            elif sym.type == kconfiglib.INT:
-                val = int(val)
-            config_dict[sym.name] = val
-    for n in config.node_iter(False):
-        write_node(n)
-    return config_dict
-
-
-def write_json(deprecated_options, config, filename):
-    config_dict = get_json_values(config)
-    with open(filename, "w") as f:
-        json.dump(config_dict, f, indent=4, sort_keys=True)
-
-
-def get_menu_node_id(node):
-    """ Given a menu node, return a unique id
-    which can be used to identify it in the menu structure
-
-    Will either be the config symbol name, or a menu identifier
-    'slug'
-
-    """
-    try:
-        if not isinstance(node.item, kconfiglib.Choice):
-            return node.item.name
-    except AttributeError:
-        pass
-
-    result = []
-    while node.parent is not None:
-        slug = re.sub(r'\W+', '-', node.prompt[0]).lower()
-        result.append(slug)
-        node = node.parent
-
-    result = "-".join(reversed(result))
-    return result
-
-
-def write_json_menus(deprecated_options, config, filename):
-    existing_ids = set()
-    result = []  # root level items
-    node_lookup = {}  # lookup from MenuNode to an item in result
-
-    def write_node(node):
-        try:
-            json_parent = node_lookup[node.parent]["children"]
-        except KeyError:
-            assert node.parent not in node_lookup  # if fails, we have a parent node with no "children" entity (ie a bug)
-            json_parent = result  # root level node
-
-        # node.kconfig.y means node has no dependency,
-        if node.dep is node.kconfig.y:
-            depends = None
-        else:
-            depends = kconfiglib.expr_str(node.dep)
-
-        try:
-            # node.is_menuconfig is True in newer kconfiglibs for menus and choices as well
-            is_menuconfig = node.is_menuconfig and isinstance(node.item, kconfiglib.Symbol)
-        except AttributeError:
-            is_menuconfig = False
-
-        new_json = None
-        if node.item == kconfiglib.MENU or is_menuconfig:
-            new_json = {"type": "menu",
-                        "title": node.prompt[0],
-                        "depends_on": depends,
-                        "children": [],
-                        }
-            if is_menuconfig:
-                sym = node.item
-                new_json["name"] = sym.name
-                new_json["help"] = node.help
-                new_json["is_menuconfig"] = is_menuconfig
-                greatest_range = None
-                if len(sym.ranges) > 0:
-                    # Note: Evaluating the condition using kconfiglib's expr_value
-                    # should have one condition which is true
-                    for min_range, max_range, cond_expr in sym.ranges:
-                        if kconfiglib.expr_value(cond_expr):
-                            greatest_range = [min_range, max_range]
-                new_json["range"] = greatest_range
-
-        elif isinstance(node.item, kconfiglib.Symbol):
-            sym = node.item
-            greatest_range = None
-            if len(sym.ranges) > 0:
-                # Note: Evaluating the condition using kconfiglib's expr_value
-                # should have one condition which is true
-                for min_range, max_range, cond_expr in sym.ranges:
-                    if kconfiglib.expr_value(cond_expr):
-                        base = 16 if sym.type == kconfiglib.HEX else 10
-                        greatest_range = [int(min_range.str_value, base), int(max_range.str_value, base)]
-                        break
-
-            new_json = {
-                "type": kconfiglib.TYPE_TO_STR[sym.type],
-                "name": sym.name,
-                "title": node.prompt[0] if node.prompt else None,
-                "depends_on": depends,
-                "help": node.help,
-                "range": greatest_range,
-                "children": [],
-            }
-        elif isinstance(node.item, kconfiglib.Choice):
-            choice = node.item
-            new_json = {
-                "type": "choice",
-                "title": node.prompt[0],
-                "name": choice.name,
-                "depends_on": depends,
-                "help": node.help,
-                "children": []
-            }
-
-        if new_json:
-            node_id = get_menu_node_id(node)
-            if node_id in existing_ids:
-                raise RuntimeError("Config file contains two items with the same id: %s (%s). " +
-                                   "Please rename one of these items to avoid ambiguity." % (node_id, node.prompt[0]))
-            new_json["id"] = node_id
-
-            json_parent.append(new_json)
-            node_lookup[node] = new_json
-
-    for n in config.node_iter():
-        write_node(n)
-    with open(filename, "w") as f:
-        f.write(json.dumps(result, sort_keys=True, indent=4))
-
-
-def write_docs(deprecated_options, config, filename):
-    try:
-        target = os.environ['IDF_TARGET']
-    except KeyError:
-        print('IDF_TARGET environment variable must be defined!')
-        sys.exit(1)
-
-    visibility = gen_kconfig_doc.ConfigTargetVisibility(config, target)
-    gen_kconfig_doc.write_docs(config, visibility, filename)
-    deprecated_options.append_doc(config, visibility, filename)
-
-
 def update_if_changed(source, destination):
     with open(source, "r") as f:
         source_contents = f.read()
@@ -617,13 +370,8 @@ def update_if_changed(source, destination):
         f.write(source_contents)
 
 
-OUTPUT_FORMATS = {"config": write_config,
-                  "makefile": write_makefile,  # only used with make in order to generate auto.conf
-                  "header": write_header,
+OUTPUT_FORMATS = {"header": write_header,
                   "cmake": write_cmake,
-                  "docs": write_docs,
-                  "json": write_json,
-                  "json_menus": write_json_menus,
                   }
 
 
