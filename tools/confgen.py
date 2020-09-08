@@ -30,8 +30,6 @@ import sys
 import tempfile
 from future.utils import iteritems
 
-import gen_kconfig_doc
-
 try:
     from . import kconfiglib
 except Exception:
