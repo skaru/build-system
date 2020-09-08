@@ -1,5 +1,5 @@
 #include "foo.h"
 
-void printBar() {
+void printFoo() {
     puts("FOO");
 }
