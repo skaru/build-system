@@ -1,5 +1,2 @@
-if(CONFIG_FOO_ENABLE STREQUAL "y")
-    add_library(foo STATIC foo.c)
-    target_link_libraries(${CMAKE_PROJECT_NAME} PUBLIC foo)
-    target_include_directories(foo PUBLIC include)
-endif()
+include("${PROJECT_SOURCE_DIR}/tools/component.cmake")
+register_component(SRCS foo.c)
