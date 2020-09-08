@@ -1,4 +1,5 @@
-if(CONFIG_FOO STREQUAL "y")
+if(CONFIG_FOO_ENABLE STREQUAL "y")
     add_library(foo STATIC foo.c)
+    target_link_libraries(${CMAKE_PROJECT_NAME} PUBLIC foo)
     target_include_directories(foo PUBLIC include)
 endif()

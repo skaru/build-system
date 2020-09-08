@@ -2,8 +2,8 @@ cmake_minimum_required(VERSION 3.18.2)
 include("build/config.cmake")
 
 project(Foobar VERSION 1.0)
-add_executable(${CMAKE_PROJECT_NAME} "main/main.c")
 
+add_executable(${CMAKE_PROJECT_NAME} "main/main.c")
 add_subdirectory(main)
 
 macro(SUBDIR_LIST result curdir)
@@ -17,11 +17,10 @@ macro(SUBDIR_LIST result curdir)
   set(${result} ${dirlist})
 endmacro()
 
-#conditional
-SUBDIR_LIST(SUB_DIRS "${PROJECT_SOURCE_DIR}/components")
-foreach(subdir ${SUB_DIRS})
-    add_subdirectory("components/${subdir}")
+SUBDIR_LIST(COMPONENTS "${PROJECT_SOURCE_DIR}/components")
+foreach(component ${COMPONENTS})
+    add_subdirectory("components/${component}")
 endforeach()
 
 #conditional link list
-target_link_libraries(${CMAKE_PROJECT_NAME} PUBLIC main bar)
+#target_link_libraries(${CMAKE_PROJECT_NAME} PUBLIC main ${COMPONENTS})
