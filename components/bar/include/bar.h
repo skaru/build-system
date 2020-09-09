@@ -1,4 +1,4 @@
 #include <stdio.h>
-#include "../build/config.h"
+#include "config.h"
 
 void printBar();
