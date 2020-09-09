@@ -8,5 +8,6 @@ mainmenu "Config"
 		menu "Bar"
 			config BAR_VALUE
 				int "Value"
+				default 40
 		endmenu
 endmenu
