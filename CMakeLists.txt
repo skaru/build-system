@@ -3,7 +3,7 @@ include("build/config.cmake")
 
 project(Foobar VERSION 1.0)
 
-add_executable(${CMAKE_PROJECT_NAME} "main/main.c")
+add_executable(${CMAKE_PROJECT_NAME} $<TARGET_OBJECTS:main>)
 add_subdirectory(main)
 
 file(GLOB children RELATIVE "${PROJECT_SOURCE_DIR}/components" "${PROJECT_SOURCE_DIR}/components/*")
