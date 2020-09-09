@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import argparse
 import subprocess
@@ -21,15 +21,15 @@ def main():
         
         if args.menuconfig == True:    
             os.environ["KCONFIG_CONFIG"] = "build/.config"
-            subprocess.call("python tools/menuconfig.py", env=os.environ.copy())
+            subprocess.call([sys.executable, "tools/menuconfig.py"], env=os.environ.copy())
         elif args.build == True:
             if not os.path.exists('build/.config'):
                 os.environ["KCONFIG_CONFIG"] = "build/.config"
-                subprocess.call("python tools/menuconfig.py", env=os.environ.copy())
-            subprocess.call("python tools/confgen.py --kconfig Kconfig --config build/.config --output header build/config.h --output cmake build/config.cmake")
+                subprocess.call([sys.executable, "tools/menuconfig.py"], env=os.environ.copy())
+            subprocess.call([sys.executable, "tools/confgen.py", "--kconfig", "Kconfig", "--config", "build/.config", "--output", "header", "build/config.h", "--output", "cmake", "build/config.cmake"])
             os.chdir("build")
-            subprocess.call("cmake ..")
-            subprocess.call("cmake --build .")
+            subprocess.call(["cmake", ".."])
+            subprocess.call(["cmake", "--build", "."])
 
 if __name__ == "__main__":
     main()
